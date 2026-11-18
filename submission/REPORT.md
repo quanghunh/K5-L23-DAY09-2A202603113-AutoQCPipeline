@@ -1,6 +1,5 @@
 # Báo cáo Day 09 — Huỳnh Nhật Quang, 2A202603113
 
-> Xoá mọi `TODO(học viên)` và dòng gợi ý. Mỗi ý trả lời bằng **số lấy từ `submission/reports/`**, kèm mẫu số. Cả báo cáo ~1–2 trang.
 
 ## 1. Kết luận trước
 Pipeline ra **Hold**, chưa phải Release.
@@ -57,9 +56,7 @@ Với `phash_dist` thì bằng chứng nằm ở raw: đổi từ 2 sang 4 làm 
 - **Ảnh trùng bị thu nhỏ mạnh hơn.** Calib còn 2/6 ca `DUP_IMAGE_NEAR` mà phash không bắt được ở ngưỡng 4. Hai cặp trùng bắt được trên raw đều chỉ là bản thu nhỏ khoảng 90% (phash cách nhau 0), nên chưa có gì chứng minh ảnh bị cắt hay biến đổi mạnh sẽ bị bắt.
 
 ## 5. Train: raw vs clean (tùy chọn, chấm riêng)
-Chưa train: ghi "chưa chạy" và lý do, rồi bỏ qua phần còn lại của mục này. Nếu đã train: dán bảng từ `submission/results/comparison.md` (model, epoch, seed, số ảnh train mỗi biến thể).
-
-TODO(học viên): chênh mAP50 (clean − raw) so với **độ lệch chuẩn giữa các seed**; kết luận **trung thực** (nằm trong nhiễu thì nói là chưa kết luận được); ≥ 2 giả thuyết giải thích (ảnh trùng/rò rỉ test trong `raw`, nhãn máy còn lại trong `clean`, test chỉ 100 ảnh…) và cách kiểm.
+**Chưa chạy train.** Tôi ưu tiên làm xong phần lõi (4 module, calibration, pipeline, báo cáo) trước nên chưa có `submission/results/`. Vì vậy tôi không có số mAP50 nào để so raw với clean và không đưa ra kết luận gì về chuyện dataset sạch có tốt hơn hay không. Lưu ý `submission/export/clean_v1` hiện là bản **nháp**, vì kết luận của pipeline là Hold chứ chưa phát hành.
 
 ## 6. Quyết định và ghi chú AI
 (a) **Quyết định cuối: Hold.** Muốn lên Release thì số ảnh còn cảnh báo chưa duyệt phải dưới 10%, tức tối đa 20 trên 205 ảnh; sau khi calibrate còn 38 (lúc đầu là 60). Phần còn lại chủ yếu là `POSSIBLE_LOOSE_BOX` (16 dòng) và `POSSIBLE_FALSE_POS` (11 dòng), đúng hai loại có precision thấp nhất trong calibration (0,20 và 0,31), nên nhiều khả năng một phần là cờ thừa, nhưng máy không tự phân biệt được. Tôi không đẩy `conf` lên 0,7 hay 0,8 chỉ để giảm số cờ, vì như đã giải thích ở mục 3 nó làm `POSSIBLE_MISSING` mất recall, tức là Release nhờ checker bị mù. Để thành Release một cách chính đáng thì cần người xem thêm nhiều ảnh hơn 80 suất, hoặc guideline của dự án chấp nhận ngưỡng cảnh báo cao hơn 10%. Tôi không đổi `warn_ratio_hold` hay `budget_images` để ép ra Release.
@@ -67,6 +64,6 @@ TODO(học viên): chênh mAP50 (clean − raw) so với **độ lệch chuẩn 
 (b) Có dùng AI (Claude) để viết 4 module `label_format`, `gate`, `autofix`, `second_opinion`.
 - **Prompt chính:** tôi nhờ AI đọc `docs/PROMPTING.md` và Bước 2 trong `GUIDE.md`, đọc nội dung hiện tại của 4 file stub cùng docstring và test, rồi viết lại đúng 4 file. Code được ghi vào repo nhưng tôi tự kiểm trước rồi mới commit.
 - **Cách kiểm:** chạy `pytest` cho 4 file test của 4 module (50 test). AI còn thử thêm 9 ca ngoài test: dòng dính 2 lỗi, dòng trống giữa file, `inf` ở cột id lớp, chạy `autofix` hai lần, đúng biên 10% của gate, một ảnh có nhiều dự đoán. Sau đó tôi chạy `python -m pipeline.run` và đối chiếu với `07_error_list_v3`.
-- TODO(học viên): ghi **1 lần AI sai hoặc thiếu** mà bạn thực sự gặp và cách bạn sửa (nếu chưa gặp lần nào thì ghi trung thực như vậy).
+- **1 lần AI sai:** lúc đầu tôi nhờ AI vẽ 10 ảnh để xem nhãn thì nó chỉ ra 2 ảnh, rồi các ảnh sau cũng chưa chọn ngẫu nhiên và chưa có đủ cả ảnh đúng lẫn ảnh sai. Tôi phải nhắc hai lần, sau đó AI mới chọn ngẫu nhiên có cả hai loại và tôi dùng được để đối chiếu với `02_error_list_v1`.
 
 *(Thưởng +2, tùy chọn)* CVAT: lọc `width < 20`, ảnh/số box khớp, đối chiếu `BOX_TINY` (xem docs/CVAT_FILTER.md), 1 câu về `can_review`.
