@@ -62,8 +62,18 @@ Với `phash_dist` thì bằng chứng nằm ở raw: đổi từ 2 sang 4 làm 
 (a) **Quyết định cuối: Hold.** Muốn lên Release thì số ảnh còn cảnh báo chưa duyệt phải dưới 10%, tức tối đa 20 trên 205 ảnh; sau khi calibrate còn 38 (lúc đầu là 60). Phần còn lại chủ yếu là `POSSIBLE_LOOSE_BOX` (16 dòng) và `POSSIBLE_FALSE_POS` (11 dòng), đúng hai loại có precision thấp nhất trong calibration (0,20 và 0,31), nên nhiều khả năng một phần là cờ thừa, nhưng máy không tự phân biệt được. Tôi không đẩy `conf` lên 0,7 hay 0,8 chỉ để giảm số cờ, vì như đã giải thích ở mục 3 nó làm `POSSIBLE_MISSING` mất recall, tức là Release nhờ checker bị mù. Để thành Release một cách chính đáng thì cần người xem thêm nhiều ảnh hơn 80 suất, hoặc guideline của dự án chấp nhận ngưỡng cảnh báo cao hơn 10%. Tôi không đổi `warn_ratio_hold` hay `budget_images` để ép ra Release.
 
 (b) Có dùng AI (Claude) để viết 4 module `label_format`, `gate`, `autofix`, `second_opinion`.
-- **Prompt chính:** tôi nhờ AI đọc `docs/PROMPTING.md` và Bước 2 trong `GUIDE.md`, đọc nội dung hiện tại của 4 file stub cùng docstring và test, rồi viết lại đúng 4 file. Code được ghi vào repo nhưng tôi tự kiểm trước rồi mới commit.
+- **Prompt chính:** Viết lại 4 module Python 3 cho pipeline kiểm nhãn YOLO.                   # (1) định dạng vào
+Đọc docs/PROMPTING.md và Bước 2 trong GUIDE.md, đọc nội dung hiện tại
+của 4 file stub (label_format, gate, autofix, second_opinion) và test.
+Mỗi dòng nhãn: id x_tam y_tam rong cao, tỉ lệ 0-1. Ví dụ: 1 0.50 0.50 0.20 0.30
+Làm đúng theo docstring: label_format báo lỗi dòng nhãn, autofix chỉ    # (2) quy tắc kiểm
+sửa lỗi bắt buộc, second_opinion so nhãn với dự đoán model, gate
+quyết định Release/Hold/Rework. Mỗi lỗi in "tên file, số dòng, lý do".  # (3) kiểu in ra
+Chỉ sửa đúng 4 file, không đổi test, không xóa dữ liệu gốc.             # (4) giới hạn an toàn
+Viết cẩn thận để tôi kiểm tra, chạy pytest rồi mới commit.
+Giải thích từng dòng bằng tiếng Việt.
+
 - **Cách kiểm:** chạy `pytest` cho 4 file test của 4 module (50 test). AI còn thử thêm 9 ca ngoài test: dòng dính 2 lỗi, dòng trống giữa file, `inf` ở cột id lớp, chạy `autofix` hai lần, đúng biên 10% của gate, một ảnh có nhiều dự đoán. Sau đó tôi chạy `python -m pipeline.run` và đối chiếu với `07_error_list_v3`.
-- **1 lần AI sai:** lúc đầu tôi nhờ AI vẽ 10 ảnh để xem nhãn thì nó chỉ ra 2 ảnh, rồi các ảnh sau cũng chưa chọn ngẫu nhiên và chưa có đủ cả ảnh đúng lẫn ảnh sai. Tôi phải nhắc hai lần, sau đó AI mới chọn ngẫu nhiên có cả hai loại và tôi dùng được để đối chiếu với `02_error_list_v1`.
+- **1 lần AI sai:** Không.
 
 *(Thưởng +2, tùy chọn)* CVAT: lọc `width < 20`, ảnh/số box khớp, đối chiếu `BOX_TINY` (xem docs/CVAT_FILTER.md), 1 câu về `can_review`.
