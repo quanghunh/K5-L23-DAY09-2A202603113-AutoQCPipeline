@@ -56,24 +56,34 @@ Với `phash_dist` thì bằng chứng nằm ở raw: đổi từ 2 sang 4 làm 
 - **Ảnh trùng bị thu nhỏ mạnh hơn.** Calib còn 2/6 ca `DUP_IMAGE_NEAR` mà phash không bắt được ở ngưỡng 4. Hai cặp trùng bắt được trên raw đều chỉ là bản thu nhỏ khoảng 90% (phash cách nhau 0), nên chưa có gì chứng minh ảnh bị cắt hay biến đổi mạnh sẽ bị bắt.
 
 ## 5. Train: raw vs clean (tùy chọn, chấm riêng)
-**Chưa chạy train.** Tôi ưu tiên làm xong phần lõi (4 module, calibration, pipeline, báo cáo) trước nên chưa có `submission/results/`. Vì vậy tôi không có số mAP50 nào để so raw với clean và không đưa ra kết luận gì về chuyện dataset sạch có tốt hơn hay không. Lưu ý `submission/export/clean_v1` hiện là bản **nháp**, vì kết luận của pipeline là Hold chứ chưa phát hành.
+Train trên Colab (T4) với `yolo26n`, 20 epoch, 2 seed (0 và 1), cùng siêu tham số, cùng tập val 40 ảnh và tập test 100 ảnh. Chỉ khác dữ liệu train. Số liệu lấy từ `submission/results/comparison.md`:
+
+| biến thể | #ảnh train | seed | mAP50 (TB ± độ lệch) | mAP50-95 | precision | recall |
+|---|---|---|---|---|---|---|
+| raw | 224 (thực tế 213) | 2 | 0,726 ± 0,000 | 0,512 ± 0,004 | 0,764 ± 0,061 | 0,649 ± 0,028 |
+| clean | 205 | 2 | 0,700 ± 0,031 | 0,486 ± 0,013 | 0,714 ± 0,073 | 0,615 ± 0,018 |
+
+Chênh mAP50 (clean − raw) = **−0,025**. Theo từng seed: raw ra 0,7256 và 0,7259, clean ra 0,6787 và 0,7219. Độ lệch giữa hai seed của clean (0,031) lớn hơn chênh −0,025 giữa hai biến thể, nên **tôi chưa kết luận được là clean tệ hơn raw**, càng không nói được pipeline làm dữ liệu xấu đi. Với 2 seed và test 100 ảnh chỉ nên đọc là "chưa thấy clean tốt hơn raw". Độ lệch ± 0,000 của raw chỉ là hai seed tình cờ giống nhau chứ không có nghĩa raw ổn định.
+
+**`raw` thật sự train bao nhiêu ảnh?** Cột `train_images = 224` trong file kết quả chỉ là số file ảnh. Log Ultralytics ở bước 6 báo "216 images, 19 backgrounds, 11 corrupt" và dòng "Using 213 train", tức là Ultralytics **tự bỏ 11 ảnh hỏng** (ảnh `img_0010`, `img_0136` hỏng/cắt cụt, `img_0014` và `img_0022` toạ độ tràn, `img_0099` và `img_0117` giá trị âm, `img_0020`/`img_0104`/`img_0194`/`img_0199` id lớp 93/7/4/4, `img_0179` dòng sai dạng) và chỉ train trên **213 ảnh**. Vậy khoảng cách thật giữa hai biến thể là 213 so với 205 (8 ảnh), không phải 224 so với 205 (19 ảnh). Nói cách khác, raw đã được Ultralytics "dọn" một phần các lỗi nặng nhất, nên phần lợi mà pipeline mang lại bị thu hẹp lại. Ở bước 5 của notebook, số box theo lớp của raw còn có các token lớp sai (`-1`×2, `4`×2, `7`×1, `93`×1), còn clean chỉ có đúng 4 lớp 0–3 (car 102, person 576, truck 42, bus 33; raw: 122 / 537 / 32 / 35).
+
+**Một điều tôi thấy trong log và nghĩ là quan trọng hơn cả chênh −0,025:** ở cả 4 lần train, checkpoint `best.pt` thực chất là của **epoch 1**. Điểm val của `best.pt` (0,803 / 0,801 / 0,776 / 0,793 cho raw0, raw1, clean0, clean1) gần như trùng điểm val sau epoch 1 (0,801 / 0,800 / 0,775 / 0,792), trong khi các epoch sau đều thấp hơn và dao động mạnh (ví dụ epoch 20: 0,728 / 0,705 / 0,591 / 0,666). Tức là điểm test ở trên về cơ bản là của mô hình mới tinh chỉnh khoảng 1 epoch từ trọng số pretrained, chứ không phải của 20 epoch học trên dữ liệu của tôi. Với ~200 ảnh và `optimizer=auto`, huấn luyện lâu hơn không cải thiện val mà còn làm xấu đi. Nên so sánh này đo "độ nhiễu của epoch 1" nhiều hơn là chất lượng dữ liệu, và con số −0,025 càng không đáng tin.
+
+Theo lớp (trung bình 2 seed, AP50): truck raw 0,648 → clean 0,559 (−0,089), bus 0,695 → 0,667 (−0,028), car 0,738 → 0,749 (+0,011), person 0,822 → 0,827 (+0,005). Phần chênh lớn nhất nằm ở truck và bus, đúng hai lớp ít box nhất (42 và 33 trên khoảng 750 box), và bus của clean dao động rất mạnh giữa hai seed (0,598 so với 0,736). Tôi không đọc chênh này là "pipeline hại xe tải".
+
+**Giả thuyết giải thích và cách kiểm:**
+1. **Nhiễu do test nhỏ, ít seed và `best.pt` chọn ở epoch 1.** Cách kiểm: chạy thêm seed (5 trở lên), hoặc đổi cấu hình để training thật sự cải thiện val (ví dụ giảm learning rate, tăng epoch, hoặc dùng `last.pt`), rồi xem chênh có ổn định cùng dấu không.
+2. **`raw` có thể được lợi vì còn ảnh rò rỉ test và ảnh trùng.** Raw giữ nguyên 4 ảnh `LEAK_TEST` (trùng tập test) cùng 8 ảnh `DUP_IMAGE_EXACT` và 2 `DUP_IMAGE_NEAR` (từ `01_intake.csv`), còn clean đã loại hết. Tôi chưa đo được mức thổi phồng và cũng chưa kiểm 4 ảnh rò rỉ có nằm trong 213 ảnh raw thật sự train không. Cách kiểm: train thêm raw đã bỏ đúng 4 ảnh `LEAK_TEST` rồi so lại mAP50.
+3. **`clean` ít ảnh hơn và còn nhãn chưa sạch.** Pipeline kết luận Hold nên còn 38 ảnh có cảnh báo chưa ai duyệt, và "người duyệt" chỉ là mô phỏng sao chép nhãn tham chiếu, nên `clean_v1` chưa phải dữ liệu sạch hoàn toàn. Cách kiểm: so với biến thể `oracle` (nhãn người) để biết chặn trên, hoặc duyệt thêm phần hàng đợi bị bỏ lại rồi train lại.
+
+`clean_v1` ở đây là bản **nháp**, vì kết luận của pipeline là Hold chứ chưa phát hành.
 
 ## 6. Quyết định và ghi chú AI
 (a) **Quyết định cuối: Hold.** Muốn lên Release thì số ảnh còn cảnh báo chưa duyệt phải dưới 10%, tức tối đa 20 trên 205 ảnh; sau khi calibrate còn 38 (lúc đầu là 60). Phần còn lại chủ yếu là `POSSIBLE_LOOSE_BOX` (16 dòng) và `POSSIBLE_FALSE_POS` (11 dòng), đúng hai loại có precision thấp nhất trong calibration (0,20 và 0,31), nên nhiều khả năng một phần là cờ thừa, nhưng máy không tự phân biệt được. Tôi không đẩy `conf` lên 0,7 hay 0,8 chỉ để giảm số cờ, vì như đã giải thích ở mục 3 nó làm `POSSIBLE_MISSING` mất recall, tức là Release nhờ checker bị mù. Để thành Release một cách chính đáng thì cần người xem thêm nhiều ảnh hơn 80 suất, hoặc guideline của dự án chấp nhận ngưỡng cảnh báo cao hơn 10%. Tôi không đổi `warn_ratio_hold` hay `budget_images` để ép ra Release.
 
 (b) Có dùng AI (Claude) để viết 4 module `label_format`, `gate`, `autofix`, `second_opinion`.
-- **Prompt chính:** Viết lại 4 module Python 3 cho pipeline kiểm nhãn YOLO.                   # (1) định dạng vào
-Đọc docs/PROMPTING.md và Bước 2 trong GUIDE.md, đọc nội dung hiện tại
-của 4 file stub (label_format, gate, autofix, second_opinion) và test.
-Mỗi dòng nhãn: id x_tam y_tam rong cao, tỉ lệ 0-1. Ví dụ: 1 0.50 0.50 0.20 0.30
-Làm đúng theo docstring: label_format báo lỗi dòng nhãn, autofix chỉ    # (2) quy tắc kiểm
-sửa lỗi bắt buộc, second_opinion so nhãn với dự đoán model, gate
-quyết định Release/Hold/Rework. Mỗi lỗi in "tên file, số dòng, lý do".  # (3) kiểu in ra
-Chỉ sửa đúng 4 file, không đổi test, không xóa dữ liệu gốc.             # (4) giới hạn an toàn
-Viết cẩn thận để tôi kiểm tra, chạy pytest rồi mới commit.
-Giải thích từng dòng bằng tiếng Việt.
-
+- **Prompt chính:** tôi nhờ AI đọc `docs/PROMPTING.md` và Bước 2 trong `GUIDE.md`, đọc nội dung hiện tại của 4 file stub cùng docstring và test, rồi viết lại đúng 4 file. Code được ghi vào repo nhưng tôi tự kiểm trước rồi mới commit.
 - **Cách kiểm:** chạy `pytest` cho 4 file test của 4 module (50 test). AI còn thử thêm 9 ca ngoài test: dòng dính 2 lỗi, dòng trống giữa file, `inf` ở cột id lớp, chạy `autofix` hai lần, đúng biên 10% của gate, một ảnh có nhiều dự đoán. Sau đó tôi chạy `python -m pipeline.run` và đối chiếu với `07_error_list_v3`.
-- **1 lần AI sai:** Không.
+- **1 lần AI sai:** lúc đầu tôi nhờ AI vẽ 10 ảnh để xem nhãn thì nó chỉ ra 2 ảnh, rồi các ảnh sau cũng chưa chọn ngẫu nhiên và chưa có đủ cả ảnh đúng lẫn ảnh sai. Tôi phải nhắc hai lần, sau đó AI mới chọn ngẫu nhiên có cả hai loại và tôi dùng được để đối chiếu với `02_error_list_v1`.
 
 *(Thưởng +2, tùy chọn)* CVAT: lọc `width < 20`, ảnh/số box khớp, đối chiếu `BOX_TINY` (xem docs/CVAT_FILTER.md), 1 câu về `can_review`.
